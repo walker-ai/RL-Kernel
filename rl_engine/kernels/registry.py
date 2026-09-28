@@ -106,6 +106,12 @@ class OpBackend(Enum, metaclass=_KernelEnumMeta):
 
     # Variable-length packing (pack-and-pad), [B,S,...] -> [Total_Active,...]
     PYTORCH_PACK = "rl_engine.kernels.ops.pytorch.packing.pack.NativePackOp"
+    PYTORCH_H3_VIDEO_PATCH = (
+        "rl_engine.kernels.ops.pytorch.packing.h3_video_patch.NativeH3VideoPatchOp"
+    )
+    TRITON_H3_VIDEO_PATCH = (
+        "rl_engine.kernels.ops.triton.h3_video_patch.TritonH3VideoPatchOp"
+    )
     # Batch-invariant deterministic GEMM (WS1 #146)
     CUDA_DET_GEMM = "rl_engine.kernels.ops.cuda.matmul.det_gemm.DetGemmOp"
     TRITON_DET_GEMM = "rl_engine.kernels.ops.triton.matmul.det_gemm.TritonDetGemmOp"
@@ -203,6 +209,44 @@ class OpBackend(Enum, metaclass=_KernelEnumMeta):
 
 def _default_semantic_descriptors() -> tuple[OperatorBackendDescriptor, ...]:
     return (
+        OperatorBackendDescriptor(
+            semantic_op="h3_video_patch_pack_unpack",
+            backend_id="pytorch-h3-video-patch-v1",
+            supported_targets=frozenset({"rollout", "training"}),
+            supported_devices=frozenset({"cpu", "cuda", "rocm"}),
+            supported_dtypes=frozenset({"float32", "bfloat16", "float16"}),
+            supported_topologies={"*": "*"},
+            determinism_or_alignment_properties={
+                "algorithm": "h3_patch_1x2x2_permutation",
+                "batch_invariant": True,
+                "strict_observable": True,
+            },
+            lifecycle=OperatorLifecycle.ENGINE_CONSTRUCTION,
+            implementation_class_or_factory=(
+                "rl_engine.kernels.ops.pytorch.packing.h3_video_patch.NativeH3VideoPatchOp"
+            ),
+            fallback_policy=OperatorFallbackPolicy.ERROR,
+            version_or_build_fingerprint="pytorch-h3-video-patch-v1",
+        ),
+        OperatorBackendDescriptor(
+            semantic_op="h3_video_patch_pack_unpack",
+            backend_id="triton-h3-video-patch-v1",
+            supported_targets=frozenset({"rollout", "training"}),
+            supported_devices=frozenset({"cuda", "rocm"}),
+            supported_dtypes=frozenset({"float32", "bfloat16", "float16"}),
+            supported_topologies={"*": "*"},
+            determinism_or_alignment_properties={
+                "algorithm": "h3_patch_1x2x2_permutation",
+                "batch_invariant": True,
+                "strict_observable": True,
+            },
+            lifecycle=OperatorLifecycle.ENGINE_CONSTRUCTION,
+            implementation_class_or_factory=(
+                "rl_engine.kernels.ops.triton.h3_video_patch.TritonH3VideoPatchOp"
+            ),
+            fallback_policy=OperatorFallbackPolicy.ERROR,
+            version_or_build_fingerprint="triton-h3-video-patch-v1",
+        ),
         OperatorBackendDescriptor(
             semantic_op="selected_logprob",
             backend_id="rlkernel.reference_logp",
@@ -584,6 +628,7 @@ class KernelRegistry:
                 ],
                 "ratio_kl": [OpBackend.TRITON_RATIO_KL, OpBackend.PYTORCH_RATIO_KL],
                 "pack": [OpBackend.PYTORCH_PACK],
+                "h3_video_patch": [OpBackend.TRITON_H3_VIDEO_PATCH, OpBackend.PYTORCH_H3_VIDEO_PATCH],
                 "det_gemm": [OpBackend.CUDA_DET_GEMM, OpBackend.TRITON_DET_GEMM],
                 "batch_invariant_logp": [
                     OpBackend.TRITON_BATCH_INVARIANT_LOGP,
@@ -638,6 +683,7 @@ class KernelRegistry:
                 ],
                 "ratio_kl": [OpBackend.TRITON_RATIO_KL, OpBackend.PYTORCH_RATIO_KL],
                 "pack": [OpBackend.PYTORCH_PACK],
+                "h3_video_patch": [OpBackend.TRITON_H3_VIDEO_PATCH, OpBackend.PYTORCH_H3_VIDEO_PATCH],
                 "det_gemm": [OpBackend.TRITON_DET_GEMM],
                 "batch_invariant_logp": [
                     OpBackend.TRITON_BATCH_INVARIANT_LOGP,
@@ -676,6 +722,7 @@ class KernelRegistry:
                 ],
                 "ratio_kl": [OpBackend.TRITON_RATIO_KL, OpBackend.PYTORCH_RATIO_KL],
                 "pack": [OpBackend.PYTORCH_PACK],
+                "h3_video_patch": [OpBackend.PYTORCH_H3_VIDEO_PATCH],
                 "det_gemm": [OpBackend.TRITON_DET_GEMM],
                 "batch_invariant_logp": [
                     OpBackend.TRITON_BATCH_INVARIANT_LOGP,
@@ -711,6 +758,7 @@ class KernelRegistry:
                 "linear_logp": [OpBackend.PYTORCH_LINEAR_LOGP],
                 "ratio_kl": [OpBackend.PYTORCH_RATIO_KL],
                 "pack": [OpBackend.PYTORCH_PACK],
+                "h3_video_patch": [OpBackend.PYTORCH_H3_VIDEO_PATCH],
                 "batch_invariant_logp": [OpBackend.PYTORCH_BATCH_INVARIANT_LOGP],
                 "matmul": [OpBackend.PYTORCH_NATIVE_MATMUL],
                 "rms_norm": [OpBackend.PYTORCH_NATIVE_RMS_NORM],
@@ -1042,6 +1090,27 @@ class KernelRegistry:
                 return op_instance
 
         raise RuntimeError(f"No functional backend found for {op_type} on {platform}")
+
+    def get_h3_video_patch_op(
+        self, device: torch.device | str, *, strict: bool = True
+    ) -> Any:
+        """Resolve the H3 permutation, failing closed on a missing GPU kernel."""
+        platform = self._platform_for_device(device)
+        if platform not in ("cpu", "cuda", "rocm"):
+            raise RuntimeError(f"H3 video patch does not support {platform}")
+        backend = (
+            OpBackend.PYTORCH_H3_VIDEO_PATCH
+            if platform == "cpu"
+            else OpBackend.TRITON_H3_VIDEO_PATCH
+        )
+        op = self._get_or_create_backend(backend)
+        if op is not None:
+            return op
+        if not strict and platform != "cpu":
+            fallback = self._get_or_create_backend(OpBackend.PYTORCH_H3_VIDEO_PATCH)
+            if fallback is not None:
+                return fallback
+        raise RuntimeError(f"H3 video patch backend {backend.name} unavailable on {platform}")
 
     def _platform_for_device(self, device: torch.device | str | None) -> str:
         if device is None:
