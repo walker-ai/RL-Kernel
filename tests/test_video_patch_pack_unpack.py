@@ -6,7 +6,7 @@
 import pytest
 import torch
 
-from rl_engine.kernels.ops.pytorch.packing.video_patch_pack_unpack import (
+from rl_engine.kernels.ops.pytorch.video_patch_pack_unpack import (
     NativeVideoPatchPackUnpackOp,
     pack_video_patch_reference,
     unpack_video_patch_reference,

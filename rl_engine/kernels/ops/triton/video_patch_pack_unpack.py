@@ -9,7 +9,7 @@ import torch
 import triton
 import triton.language as tl
 
-from rl_engine.kernels.ops.pytorch.packing.video_patch_pack_unpack import (
+from rl_engine.kernels.ops.pytorch.video_patch_pack_unpack import (
     _CHANNELS,
     _WIDTH,
     _validate_pack,

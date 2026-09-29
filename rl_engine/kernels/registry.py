@@ -107,7 +107,7 @@ class OpBackend(Enum, metaclass=_KernelEnumMeta):
     # Variable-length packing (pack-and-pad), [B,S,...] -> [Total_Active,...]
     PYTORCH_PACK = "rl_engine.kernels.ops.pytorch.packing.pack.NativePackOp"
     PYTORCH_VIDEO_PATCH_PACK_UNPACK = (
-        "rl_engine.kernels.ops.pytorch.packing."
+        "rl_engine.kernels.ops.pytorch."
         "video_patch_pack_unpack.NativeVideoPatchPackUnpackOp"
     )
     TRITON_VIDEO_PATCH_PACK_UNPACK = (
@@ -224,7 +224,7 @@ def _default_semantic_descriptors() -> tuple[OperatorBackendDescriptor, ...]:
             },
             lifecycle=OperatorLifecycle.ENGINE_CONSTRUCTION,
             implementation_class_or_factory=(
-                "rl_engine.kernels.ops.pytorch.packing."
+                "rl_engine.kernels.ops.pytorch."
                 "video_patch_pack_unpack.NativeVideoPatchPackUnpackOp"
             ),
             fallback_policy=OperatorFallbackPolicy.ERROR,

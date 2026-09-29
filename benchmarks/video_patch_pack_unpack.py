@@ -12,7 +12,7 @@ import time
 
 import torch
 
-from rl_engine.kernels.ops.pytorch.packing.video_patch_pack_unpack import (
+from rl_engine.kernels.ops.pytorch.video_patch_pack_unpack import (
     NativeVideoPatchPackUnpackOp,
 )
 from rl_engine.kernels.registry import KernelRegistry
