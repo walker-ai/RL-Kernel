@@ -9,12 +9,15 @@ two output dimensions after applying the same permutation.
 
 from __future__ import annotations
 
+import operator
+
 import torch
 
 _CHANNELS = 24
 _PATCH_T, _PATCH_H, _PATCH_W = 1, 2, 2
 _WIDTH = _CHANNELS * _PATCH_T * _PATCH_H * _PATCH_W
 _DTYPES = (torch.float16, torch.bfloat16, torch.float32)
+_MAX_FRAME_GRID = 65535  # Triton uses grid axis 1 for B*T on CUDA and ROCm.
 
 
 def _validate_pack(x: torch.Tensor) -> tuple[int, int, int, int]:
@@ -25,6 +28,8 @@ def _validate_pack(x: torch.Tensor) -> tuple[int, int, int, int]:
     b, c, t, h, w = x.shape
     if b < 1 or t < 1 or h < 1 or w < 1:
         raise ValueError("B, T, H and W must be positive")
+    if b * t > _MAX_FRAME_GRID:
+        raise ValueError(f"B*T must not exceed {_MAX_FRAME_GRID} GPU launch rows")
     if c != _CHANNELS:
         raise ValueError(f"H3 video latents require {_CHANNELS} channels, got {c}")
     if h % _PATCH_H or w % _PATCH_W:
@@ -36,14 +41,21 @@ def _validate_pack(x: torch.Tensor) -> tuple[int, int, int, int]:
     return b, t, h, w
 
 
-def _validate_unpack(tokens: torch.Tensor, shape: tuple[int, int, int, int, int]) -> None:
+def _validate_unpack(
+    tokens: torch.Tensor, shape: tuple[int, int, int, int, int]
+) -> tuple[int, int, int, int, int]:
     if not isinstance(tokens, torch.Tensor):
         raise TypeError("video tokens must be a torch.Tensor")
-    if len(shape) != 5:
+    if not isinstance(shape, (tuple, torch.Size)) or len(shape) != 5:
         raise ValueError("shape must be (B,24,T,H,W)")
-    b, c, t, h, w = shape
+    try:
+        b, c, t, h, w = (operator.index(dim) for dim in shape)
+    except TypeError as exc:
+        raise TypeError("video latent shape dimensions must be integers") from exc
     if min(b, t, h, w) < 1 or c != _CHANNELS or h % 2 or w % 2:
         raise ValueError("invalid H3 video latent shape")
+    if b * t > _MAX_FRAME_GRID:
+        raise ValueError(f"B*T must not exceed {_MAX_FRAME_GRID} GPU launch rows")
     expected = (b, t * (h // 2) * (w // 2), _WIDTH)
     if tuple(tokens.shape) != expected:
         raise ValueError(f"video tokens must have shape {expected}, got {tuple(tokens.shape)}")
@@ -51,6 +63,7 @@ def _validate_unpack(tokens: torch.Tensor, shape: tuple[int, int, int, int, int]
         raise TypeError(f"unsupported video token dtype: {tokens.dtype}")
     if not tokens.is_contiguous():
         raise ValueError("video tokens must be contiguous")
+    return b, c, t, h, w
 
 
 def pack_h3_video_reference(x: torch.Tensor) -> torch.Tensor:
@@ -68,8 +81,7 @@ def unpack_h3_video_reference(
     tokens: torch.Tensor, shape: tuple[int, int, int, int, int]
 ) -> torch.Tensor:
     """Invert the H3 patch permutation without arithmetic or dtype conversion."""
-    _validate_unpack(tokens, shape)
-    b, _, t, h, w = shape
+    b, _, t, h, w = _validate_unpack(tokens, shape)
     return (
         tokens.reshape(b, t, h // 2, w // 2, _CHANNELS, 1, 2, 2)
         .permute(0, 4, 1, 5, 2, 6, 3, 7)

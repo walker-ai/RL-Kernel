@@ -12,6 +12,7 @@ import time
 
 import torch
 
+from rl_engine.kernels.ops.pytorch.packing.h3_video_patch import NativeH3VideoPatchOp
 from rl_engine.kernels.registry import KernelRegistry
 
 
@@ -51,21 +52,31 @@ def main() -> None:
     shape = (args.batch, 24, args.frames, args.height, args.width)
     x = torch.randn(shape, device=args.device, dtype=dtype)
     op = KernelRegistry().get_h3_video_patch_op(args.device, strict=True)
+    reference = NativeH3VideoPatchOp()
     tokens = op.pack(x)
     assert torch.equal(op.unpack(tokens, shape), x)
+    assert torch.equal(tokens, reference.pack(x))
     timings = {
         "pack_ms": _time_ms(lambda: op.pack(x), warmup=args.warmup,
                             repeat=args.repeat, device=args.device),
         "unpack_ms": _time_ms(lambda: op.unpack(tokens, shape), warmup=args.warmup,
                               repeat=args.repeat, device=args.device),
+        "reference_pack_ms": _time_ms(lambda: reference.pack(x), warmup=args.warmup,
+                                       repeat=args.repeat, device=args.device),
+        "reference_unpack_ms": _time_ms(lambda: reference.unpack(tokens, shape),
+                                         warmup=args.warmup, repeat=args.repeat,
+                                         device=args.device),
     }
     try:
         sha = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+        dirty = bool(subprocess.check_output(["git", "status", "--porcelain"], text=True).strip())
     except (OSError, subprocess.CalledProcessError):
         sha = "unknown"
+        dirty = None
     print(json.dumps({
         "schema_version": "rlkernel.h3_video_patch.benchmark.v1",
         "git_sha": sha,
+        "git_dirty": dirty,
         "requested_backend": "triton" if args.device == "cuda" else "pytorch",
         "actual_backend": op.backend_id,
         "kernel_id": "_copy_patch" if args.device == "cuda" else "torch.reshape_permute",

@@ -33,12 +33,30 @@ Triton 不可用时 strict 路径报错，不静默退回 PyTorch。`strict=Fals
 PyTorch fallback。记录 `op.backend_id` 可确认实际后端。普通 `get_op`
 保留仓库现有的按优先级 fallback 行为；需要严格验证时应使用上面的显式入口。
 
+## 代码执行链路
+
+1. `NativeH3VideoPatchOp` 与 `TritonH3VideoPatchOp` 都调用相同的输入检查：
+   `C=24`、`B/T/H/W>0`、`H/W` 为偶数、连续内存和允许的 dtype。
+2. `pack` 的 Triton 网格第二维枚举 `(b,t)`，第一维枚举该帧的输出值。
+   每个 lane 从 token 位置反推 `(c,h,w)`，读取
+   `latents[b,c,t,h,w]`，写入连续的 token 地址。`unpack` 对调读写地址。
+   输入是 `(B,C,T,H,W)`，所以输入帧与输出帧的内存起点在 `T>1` 时
+   不同；不能直接套用 Qwen-Image 的单帧 `batch_base`。
+3. 启动内核前把 FP32 看成 `int32`、FP16/BF16 看成 `int16`，GPU 只搬运
+   整数位。它保留有符号零、无穷大和 NaN payload，不做浮点运算。
+4. backward 再次通过 autograd 的 `apply` 执行逆排列。这样在
+   `create_graph=True` 时，二阶梯度仍能沿排列关系传播。
+
+该实现参考 #410 的块内顺序、原始位搬运和逆排列梯度，但不导入尚未
+合并的 #410 代码。一个独立的 H3 PyTorch 参考实现用于核对 GPU 结果。
+
 ## 数值与限制
 
 每个输出元素只读取一个输入元素，不做加法、归约或 dtype 转换。
 反向传播使用逆排列，因此前向、反向和往返结果应逐位一致。
 支持 FP16、BF16、FP32 的连续张量；`B,T,H,W` 必须为正，
-`H,W` 必须为偶数，通道数必须是 24。非法输入明确报错。
+`H,W` 必须为偶数，通道数必须是 24，`B*T<=65535` 以适配网格第二维。
+非法输入明确报错。
 目前没有跨设备 tensor 参数，也没有索引参数。
 
 ## 验证
