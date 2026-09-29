@@ -107,8 +107,7 @@ class OpBackend(Enum, metaclass=_KernelEnumMeta):
     # Variable-length packing (pack-and-pad), [B,S,...] -> [Total_Active,...]
     PYTORCH_PACK = "rl_engine.kernels.ops.pytorch.packing.pack.NativePackOp"
     PYTORCH_VIDEO_PATCH_PACK_UNPACK = (
-        "rl_engine.kernels.ops.pytorch."
-        "video_patch_pack_unpack.NativeVideoPatchPackUnpackOp"
+        "rl_engine.kernels.ops.pytorch.video_patch_pack_unpack.NativeVideoPatchPackUnpackOp"
     )
     TRITON_VIDEO_PATCH_PACK_UNPACK = (
         "rl_engine.kernels.ops.triton.video_patch_pack_unpack.TritonVideoPatchPackUnpackOp"
@@ -210,46 +209,6 @@ class OpBackend(Enum, metaclass=_KernelEnumMeta):
 
 def _default_semantic_descriptors() -> tuple[OperatorBackendDescriptor, ...]:
     return (
-        OperatorBackendDescriptor(
-            semantic_op="video_patch_pack_unpack",
-            backend_id="pytorch-video-patch-pack-unpack-v1",
-            supported_targets=frozenset({"rollout", "training"}),
-            supported_devices=frozenset({"cpu", "cuda", "rocm"}),
-            supported_dtypes=frozenset({"float32", "bfloat16", "float16"}),
-            supported_topologies={"*": "*"},
-            determinism_or_alignment_properties={
-                "algorithm": "h3_patch_1x2x2_permutation",
-                "batch_invariant": True,
-                "strict_observable": True,
-            },
-            lifecycle=OperatorLifecycle.ENGINE_CONSTRUCTION,
-            implementation_class_or_factory=(
-                "rl_engine.kernels.ops.pytorch."
-                "video_patch_pack_unpack.NativeVideoPatchPackUnpackOp"
-            ),
-            fallback_policy=OperatorFallbackPolicy.ERROR,
-            version_or_build_fingerprint="pytorch-video-patch-pack-unpack-v1",
-        ),
-        OperatorBackendDescriptor(
-            semantic_op="video_patch_pack_unpack",
-            backend_id="triton-video-patch-pack-unpack-v1",
-            supported_targets=frozenset({"rollout", "training"}),
-            supported_devices=frozenset({"cuda", "rocm"}),
-            supported_dtypes=frozenset({"float32", "bfloat16", "float16"}),
-            supported_topologies={"*": "*"},
-            determinism_or_alignment_properties={
-                "algorithm": "h3_patch_1x2x2_permutation",
-                "batch_invariant": True,
-                "strict_observable": True,
-            },
-            lifecycle=OperatorLifecycle.ENGINE_CONSTRUCTION,
-            implementation_class_or_factory=(
-                "rl_engine.kernels.ops.triton."
-                "video_patch_pack_unpack.TritonVideoPatchPackUnpackOp"
-            ),
-            fallback_policy=OperatorFallbackPolicy.ERROR,
-            version_or_build_fingerprint="triton-video-patch-pack-unpack-v1",
-        ),
         OperatorBackendDescriptor(
             semantic_op="selected_logprob",
             backend_id="rlkernel.reference_logp",
