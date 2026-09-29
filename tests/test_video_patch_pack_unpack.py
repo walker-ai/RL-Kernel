@@ -254,7 +254,7 @@ def test_gpu_backends_noncontiguous_grad_and_higher_order(gpu_op):
     grad_tokens = torch.randn(2, 96, packed.shape[1], device="cuda").transpose(1, 2)
     grad_tokens.requires_grad_()
     dx = torch.autograd.grad(packed, x, grad_tokens, create_graph=True)[0]
-    assert_bits(dx, unpack_video_patch_reference(grad_tokens, shape))
+    assert_bits(dx, unpack_video_patch_reference(grad_tokens.contiguous(), shape))
     probe = torch.randn_like(x)
     assert_bits(torch.autograd.grad(dx, grad_tokens, probe)[0], gpu_op.pack(probe))
 

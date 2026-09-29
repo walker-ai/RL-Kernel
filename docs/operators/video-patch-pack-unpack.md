@@ -74,3 +74,23 @@ python benchmarks/video_patch_pack_unpack.py --device cuda --backend triton
 
 GPU 测试须在目标 CUDA/ROCm 硬件上运行。PR 中需附设备与运行时版本、
 实际 backend、真实形状测量及机器可读结果；未验证的平台不得标记为已支持。
+
+### 与 Diffusers 原始 H3 路径对照
+
+在 NVIDIA GPU 环境中，安装固定版本、构建 CUDA 扩展并运行：
+
+```bash
+python -m pip install pytest 'diffusers==0.40.0'
+python setup.py build_ext --inplace
+python -m pytest tests/test_video_patch_pack_unpack_diffusers.py -q
+```
+
+该测试从已安装的 Diffusers 源文件提取并执行原始
+`patchify_video_latents(x, (1, 2, 2))` 函数定义。这样只依赖重排函数，
+不会因导入整个 H3 pipeline 时的其他模型组件而阻塞。测试把其
+`(B*S,96)` 输出与本算子的 `(B,S,96)` 展平后逐位比较；再将上游输出交给
+本算子的 `unpack`，逐位比较恢复的 latent，并比较 `pack` 反向梯度。
+覆盖 PyTorch、Triton、CUDA，FP32/FP16/BF16，多帧小形状和 768p 对应的
+`(1,24,32,48,84)` latent 形状。测试显式要求 Diffusers 版本和 GPU 后端，
+缺失依赖或后端会失败，不会作为通过结果跳过。它不加载模型权重，也不检验
+完整 H3 推理链路。
