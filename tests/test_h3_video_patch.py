@@ -217,3 +217,14 @@ def test_triton_batch_invariance_and_stream(gpu_op):
         recovered = gpu_op.unpack(gpu_op.pack(x), shape)
     torch.cuda.current_stream().wait_stream(stream)
     assert_bits(recovered, x)
+
+
+def test_triton_768p_layout(gpu_op):
+    # 768x1344 pixels at VAE spatial factor 16: latent H=48, W=84.
+    shape = (1, 24, 32, 48, 84)
+    cpu_x = torch.randn(shape, dtype=torch.bfloat16)
+    gpu_x = cpu_x.to("cuda")
+    packed = gpu_op.pack(gpu_x)
+    assert packed.shape == (1, 32 * 24 * 42, 96)
+    assert_bits(packed, pack_h3_video_reference(cpu_x))
+    assert_bits(gpu_op.unpack(packed, shape), cpu_x)
