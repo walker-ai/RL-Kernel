@@ -11,7 +11,7 @@ from rl_engine.kernels.ops.pytorch.video_patch_pack_unpack import (
     pack_video_patch_reference,
     unpack_video_patch_reference,
 )
-from rl_engine.kernels.registry import KernelRegistry
+from rl_engine.kernels.registry import KernelRegistry, OpBackend
 
 DTYPES = (torch.float32, torch.float16, torch.bfloat16)
 SHAPES = ((1, 24, 1, 2, 2), (2, 24, 3, 6, 10), (1, 24, 2, 48, 84))
@@ -115,14 +115,42 @@ def test_cpu_registry_is_reference():
     assert registry.get_op("video_patch_pack_unpack", device="cpu") is op
 
 
+def test_gpu_registry_falls_back_to_reference(monkeypatch):
+    registry = KernelRegistry()
+    load_backend = registry._get_or_create_backend
+
+    def load_without_triton(backend):
+        if backend is OpBackend.TRITON_VIDEO_PATCH_PACK_UNPACK:
+            return None
+        return load_backend(backend)
+
+    monkeypatch.setattr(registry, "_get_or_create_backend", load_without_triton)
+    op = registry.get_op("video_patch_pack_unpack", device="cuda")
+    assert isinstance(op, NativeVideoPatchPackUnpackOp)
+
+
+def test_gpu_registry_prefers_triton():
+    if not torch.cuda.is_available():
+        pytest.skip("CUDA/ROCm GPU required")
+    pytest.importorskip("triton")
+    from rl_engine.kernels.ops.triton.video_patch_pack_unpack import (
+        TritonVideoPatchPackUnpackOp,
+    )
+
+    op = KernelRegistry().get_op("video_patch_pack_unpack", device="cuda")
+    assert isinstance(op, TritonVideoPatchPackUnpackOp)
+
+
 @pytest.fixture
 def gpu_op():
     if not torch.cuda.is_available():
         pytest.skip("CUDA/ROCm GPU required")
     pytest.importorskip("triton")
-    op = KernelRegistry().get_op("video_patch_pack_unpack", device="cuda")
-    assert op.backend_id == "triton-video-patch-pack-unpack-v1"
-    return op
+    from rl_engine.kernels.ops.triton.video_patch_pack_unpack import (
+        TritonVideoPatchPackUnpackOp,
+    )
+
+    return TritonVideoPatchPackUnpackOp()
 
 
 @pytest.mark.parametrize("shape", SHAPES)

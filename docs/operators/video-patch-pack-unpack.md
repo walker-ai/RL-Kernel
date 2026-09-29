@@ -24,16 +24,14 @@ tokens[b, t*(H/2)*(W/2) + hi*(W/2) + wi, c*4 + dy*2 + dx]
 
 ```python
 op = KernelRegistry().get_op("video_patch_pack_unpack", device=x.device)
-if x.is_cuda and op.backend_id != "triton-video-patch-pack-unpack-v1":
-    raise RuntimeError(f"unexpected GPU backend: {op.backend_id}")
 tokens = op.pack(x)
 recovered = op.unpack(tokens, tuple(x.shape))
 ```
 
 CPU 使用独立 PyTorch 参考实现；CUDA/ROCm 优先使用 Triton，缺失时
-`get_op` 可回退 PyTorch。GPU 正确性和性能验证必须检查
-`op.backend_id == "triton-video-patch-pack-unpack-v1"`，避免把回退结果
-当成 Triton 结果。
+`get_op` 可按仓库惯例回退 PyTorch。Triton 正确性测试和 benchmark
+直接创建 `TritonVideoPatchPackUnpackOp`，明确指定被测实现；报告记录
+实际 `backend_id`。
 
 ## 代码执行链路
 

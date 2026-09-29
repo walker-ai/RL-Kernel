@@ -15,7 +15,6 @@ import torch
 from rl_engine.kernels.ops.pytorch.video_patch_pack_unpack import (
     NativeVideoPatchPackUnpackOp,
 )
-from rl_engine.kernels.registry import KernelRegistry
 
 
 def _time_ms(fn, *, warmup: int, repeat: int, device: str) -> float:
@@ -53,15 +52,15 @@ def main() -> None:
     dtype = getattr(torch, args.dtype)
     shape = (args.batch, 24, args.frames, args.height, args.width)
     x = torch.randn(shape, device=args.device, dtype=dtype)
-    op = KernelRegistry().get_op("video_patch_pack_unpack", device=args.device)
-    expected_backend = (
-        "triton-video-patch-pack-unpack-v1"
-        if args.device == "cuda"
-        else "pytorch-video-patch-pack-unpack-v1"
-    )
-    if op.backend_id != expected_backend:
-        raise RuntimeError(f"expected {expected_backend}, got {op.backend_id}")
     reference = NativeVideoPatchPackUnpackOp()
+    if args.device == "cuda":
+        from rl_engine.kernels.ops.triton.video_patch_pack_unpack import (
+            TritonVideoPatchPackUnpackOp,
+        )
+
+        op = TritonVideoPatchPackUnpackOp()
+    else:
+        op = reference
     tokens = op.pack(x)
     assert torch.equal(op.unpack(tokens, shape), x)
     assert torch.equal(tokens, reference.pack(x))
