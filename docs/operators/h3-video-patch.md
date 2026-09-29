@@ -23,7 +23,7 @@ tokens[b, t*(H/2)*(W/2) + hi*(W/2) + wi, c*4 + dy*2 + dx]
 ## 接口与后端
 
 ```python
-op = KernelRegistry().get_h3_video_patch_op(x.device, strict=True)
+op = KernelRegistry().get_video_patch_pack_unpack_op(x.device, strict=True)
 tokens = op.pack(x)
 recovered = op.unpack(tokens, tuple(x.shape))
 ```

@@ -108,9 +108,11 @@ def test_invalid_inputs():
 
 
 def test_cpu_registry_is_reference():
-    op = KernelRegistry().get_h3_video_patch_op("cpu")
+    registry = KernelRegistry()
+    op = registry.get_video_patch_pack_unpack_op("cpu")
     assert isinstance(op, NativeH3VideoPatchOp)
     assert op.backend_id == "pytorch-h3-video-patch-v1"
+    assert registry.get_op("video_patch_pack_unpack", device="cpu") is op
 
 
 @pytest.fixture
@@ -118,7 +120,7 @@ def gpu_op():
     if not torch.cuda.is_available():
         pytest.skip("CUDA/ROCm GPU required")
     pytest.importorskip("triton")
-    op = KernelRegistry().get_h3_video_patch_op("cuda", strict=True)
+    op = KernelRegistry().get_video_patch_pack_unpack_op("cuda", strict=True)
     assert op.backend_id == "triton-h3-video-patch-v1"
     return op
 

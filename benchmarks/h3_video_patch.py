@@ -51,7 +51,7 @@ def main() -> None:
     dtype = getattr(torch, args.dtype)
     shape = (args.batch, 24, args.frames, args.height, args.width)
     x = torch.randn(shape, device=args.device, dtype=dtype)
-    op = KernelRegistry().get_h3_video_patch_op(args.device, strict=True)
+    op = KernelRegistry().get_video_patch_pack_unpack_op(args.device, strict=True)
     reference = NativeH3VideoPatchOp()
     tokens = op.pack(x)
     assert torch.equal(op.unpack(tokens, shape), x)
