@@ -6,10 +6,10 @@
 import pytest
 import torch
 
-from rl_engine.kernels.ops.pytorch.packing.h3_video_patch import (
-    NativeH3VideoPatchOp,
-    pack_h3_video_reference,
-    unpack_h3_video_reference,
+from rl_engine.kernels.ops.pytorch.packing.video_patch_pack_unpack import (
+    NativeVideoPatchPackUnpackOp,
+    pack_video_patch_reference,
+    unpack_video_patch_reference,
 )
 from rl_engine.kernels.registry import KernelRegistry
 
@@ -29,7 +29,7 @@ def assert_bits(actual: torch.Tensor, expected: torch.Tensor) -> None:
 def test_coordinate_order_across_frames():
     shape = (1, 24, 2, 2, 4)
     x = torch.arange(torch.tensor(shape).prod().item(), dtype=torch.float32).reshape(shape)
-    packed = pack_h3_video_reference(x)
+    packed = pack_video_patch_reference(x)
     assert packed.shape == (1, 4, 96)
 
     # Check against source coordinates, not another pack/unpack round trip.
@@ -46,7 +46,7 @@ def test_coordinate_order_across_frames():
 
     # An independently constructed token input checks unpack's direction.
     tokens = torch.arange(4 * 96, dtype=torch.float32).reshape(1, 4, 96)
-    unpacked = unpack_h3_video_reference(tokens, shape)
+    unpacked = unpack_video_patch_reference(tokens, shape)
     for frame in range(2):
         for patch_col in range(2):
             for channel in range(24):
@@ -62,56 +62,56 @@ def test_coordinate_order_across_frames():
 def test_reference_roundtrip_and_both_gradients(shape, dtype):
     generator = torch.Generator().manual_seed(420)
     x = torch.randn(shape, generator=generator).to(dtype).requires_grad_()
-    packed = pack_h3_video_reference(x)
-    assert_bits(unpack_h3_video_reference(packed, shape), x)
+    packed = pack_video_patch_reference(x)
+    assert_bits(unpack_video_patch_reference(packed, shape), x)
 
     grad_tokens = torch.randn(packed.shape, generator=generator).to(dtype)
     dx = torch.autograd.grad(packed, x, grad_tokens)[0]
-    assert_bits(dx, unpack_h3_video_reference(grad_tokens, shape))
+    assert_bits(dx, unpack_video_patch_reference(grad_tokens, shape))
 
     tokens = torch.randn(packed.shape, generator=generator).to(dtype).requires_grad_()
-    unpacked = unpack_h3_video_reference(tokens, shape)
+    unpacked = unpack_video_patch_reference(tokens, shape)
     grad_latents = torch.randn(shape, generator=generator).to(dtype)
     dtokens = torch.autograd.grad(unpacked, tokens, grad_latents)[0]
-    assert_bits(dtokens, pack_h3_video_reference(grad_latents))
+    assert_bits(dtokens, pack_video_patch_reference(grad_latents))
 
 
 def test_reference_batch_invariance():
     x = torch.arange(24 * 3 * 6 * 10, dtype=torch.float32).reshape(1, 24, 3, 6, 10)
-    alone = pack_h3_video_reference(x)
+    alone = pack_video_patch_reference(x)
     others = torch.full_like(x, -100)
-    assert_bits(pack_h3_video_reference(torch.cat([x, others]))[0], alone[0])
-    assert_bits(pack_h3_video_reference(torch.cat([others, x]))[1], alone[0])
+    assert_bits(pack_video_patch_reference(torch.cat([x, others]))[0], alone[0])
+    assert_bits(pack_video_patch_reference(torch.cat([others, x]))[1], alone[0])
 
 
 def test_invalid_inputs():
     x = torch.empty((1, 24, 1, 2, 4))
     for bad in (torch.empty((0, 24, 1, 2, 4)), torch.empty((1, 24, 0, 2, 4))):
         with pytest.raises(ValueError, match="positive"):
-            pack_h3_video_reference(bad)
+            pack_video_patch_reference(bad)
     with pytest.raises(ValueError, match="24"):
-        pack_h3_video_reference(x[:, :23].contiguous())
+        pack_video_patch_reference(x[:, :23].contiguous())
     with pytest.raises(ValueError, match="divisible"):
-        pack_h3_video_reference(torch.empty((1, 24, 1, 3, 4)))
+        pack_video_patch_reference(torch.empty((1, 24, 1, 3, 4)))
     with pytest.raises(ValueError, match="contiguous"):
-        pack_h3_video_reference(x.transpose(-1, -2))
+        pack_video_patch_reference(x.transpose(-1, -2))
     with pytest.raises(TypeError, match="dtype"):
-        pack_h3_video_reference(x.to(torch.int32))
+        pack_video_patch_reference(x.to(torch.int32))
     with pytest.raises(ValueError, match="shape"):
-        unpack_h3_video_reference(torch.empty((1, 3, 96)), tuple(x.shape))
+        unpack_video_patch_reference(torch.empty((1, 3, 96)), tuple(x.shape))
     with pytest.raises(ValueError, match="shape"):
-        unpack_h3_video_reference(torch.empty((1, 2, 96)), (1, 24, 1, 2))
+        unpack_video_patch_reference(torch.empty((1, 2, 96)), (1, 24, 1, 2))
     with pytest.raises(TypeError, match="integers"):
-        unpack_h3_video_reference(torch.empty((1, 2, 96)), (1, 24, 1.0, 2, 4))
+        unpack_video_patch_reference(torch.empty((1, 2, 96)), (1, 24, 1.0, 2, 4))
     with pytest.raises(ValueError, match="contiguous"):
-        unpack_h3_video_reference(torch.empty((1, 96, 2)).transpose(1, 2), tuple(x.shape))
+        unpack_video_patch_reference(torch.empty((1, 96, 2)).transpose(1, 2), tuple(x.shape))
 
 
 def test_cpu_registry_is_reference():
     registry = KernelRegistry()
     op = registry.get_video_patch_pack_unpack_op("cpu")
-    assert isinstance(op, NativeH3VideoPatchOp)
-    assert op.backend_id == "pytorch-h3-video-patch-v1"
+    assert isinstance(op, NativeVideoPatchPackUnpackOp)
+    assert op.backend_id == "pytorch-video-patch-pack-unpack-v1"
     assert registry.get_op("video_patch_pack_unpack", device="cpu") is op
 
 
@@ -121,7 +121,7 @@ def gpu_op():
         pytest.skip("CUDA/ROCm GPU required")
     pytest.importorskip("triton")
     op = KernelRegistry().get_video_patch_pack_unpack_op("cuda", strict=True)
-    assert op.backend_id == "triton-h3-video-patch-v1"
+    assert op.backend_id == "triton-video-patch-pack-unpack-v1"
     return op
 
 
@@ -131,7 +131,7 @@ def test_triton_matches_independent_reference(gpu_op, shape, dtype):
     generator = torch.Generator().manual_seed(420)
     cpu_x = torch.randn(shape, generator=generator).to(dtype).requires_grad_()
     gpu_x = cpu_x.detach().to("cuda").requires_grad_()
-    expected = pack_h3_video_reference(cpu_x)
+    expected = pack_video_patch_reference(cpu_x)
     actual = gpu_op.pack(gpu_x)
     assert_bits(actual, expected)
     assert_bits(gpu_op.unpack(actual, shape), cpu_x)
@@ -139,7 +139,7 @@ def test_triton_matches_independent_reference(gpu_op, shape, dtype):
     # Independent unpack input prevents paired errors cancelling each other.
     cpu_tokens = torch.randn(expected.shape, generator=generator).to(dtype).requires_grad_()
     gpu_tokens = cpu_tokens.detach().to("cuda").requires_grad_()
-    expected_unpacked = unpack_h3_video_reference(cpu_tokens, shape)
+    expected_unpacked = unpack_video_patch_reference(cpu_tokens, shape)
     actual_unpacked = gpu_op.unpack(gpu_tokens, shape)
     assert_bits(actual_unpacked, expected_unpacked)
 
@@ -168,7 +168,7 @@ def test_triton_preserves_special_bits(gpu_op, dtype):
     repeated = torch.tensor(patterns[dtype], dtype=bits).repeat((count + 6) // 7)[:count]
     cpu_x = repeated.view(dtype).reshape(shape)
     gpu_x = cpu_x.to("cuda")
-    assert_bits(gpu_op.pack(gpu_x), pack_h3_video_reference(cpu_x))
+    assert_bits(gpu_op.pack(gpu_x), pack_video_patch_reference(cpu_x))
     assert_bits(gpu_op.unpack(gpu_op.pack(gpu_x), shape), cpu_x)
 
     token_count = 2 * 6 * 96
@@ -176,7 +176,7 @@ def test_triton_preserves_special_bits(gpu_op, dtype):
     cpu_tokens = token_bits[:token_count].view(dtype).reshape(2, 6, 96)
     assert_bits(
         gpu_op.unpack(cpu_tokens.to("cuda"), shape),
-        unpack_h3_video_reference(cpu_tokens, shape),
+        unpack_video_patch_reference(cpu_tokens, shape),
     )
 
 
@@ -187,7 +187,7 @@ def test_triton_noncontiguous_grad_and_higher_order(gpu_op):
     grad_tokens = torch.randn(2, 96, packed.shape[1], device="cuda").transpose(1, 2)
     grad_tokens.requires_grad_()
     dx = torch.autograd.grad(packed, x, grad_tokens, create_graph=True)[0]
-    assert_bits(dx, unpack_h3_video_reference(grad_tokens, shape))
+    assert_bits(dx, unpack_video_patch_reference(grad_tokens, shape))
     probe = torch.randn_like(x)
     assert_bits(torch.autograd.grad(dx, grad_tokens, probe)[0], gpu_op.pack(probe))
 
@@ -196,7 +196,7 @@ def test_triton_noncontiguous_grad_and_higher_order(gpu_op):
     grad_latents = torch.randn((2, 24, 3, 10, 6), device="cuda").transpose(-1, -2)
     grad_latents.requires_grad_()
     dtokens = torch.autograd.grad(unpacked, tokens, grad_latents, create_graph=True)[0]
-    assert_bits(dtokens, pack_h3_video_reference(grad_latents.contiguous()))
+    assert_bits(dtokens, pack_video_patch_reference(grad_latents.contiguous()))
     token_probe = torch.randn_like(tokens)
     assert_bits(
         torch.autograd.grad(dtokens, grad_latents, token_probe)[0],
@@ -228,5 +228,5 @@ def test_triton_768p_layout(gpu_op):
     gpu_x = cpu_x.to("cuda")
     packed = gpu_op.pack(gpu_x)
     assert packed.shape == (1, 32 * 24 * 42, 96)
-    assert_bits(packed, pack_h3_video_reference(cpu_x))
+    assert_bits(packed, pack_video_patch_reference(cpu_x))
     assert_bits(gpu_op.unpack(packed, shape), cpu_x)

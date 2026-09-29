@@ -35,7 +35,7 @@ PyTorch fallback。记录 `op.backend_id` 可确认实际后端。普通 `get_op
 
 ## 代码执行链路
 
-1. `NativeH3VideoPatchOp` 与 `TritonH3VideoPatchOp` 都调用相同的输入检查：
+1. `NativeVideoPatchPackUnpackOp` 与 `TritonVideoPatchPackUnpackOp` 都调用相同的输入检查：
    `C=24`、`B/T/H/W>0`、`H/W` 为偶数、连续内存和允许的 dtype。
 2. `pack` 的 Triton 网格第二维枚举 `(b,t)`，第一维枚举该帧的输出值。
    每个 lane 从 token 位置反推 `(c,h,w)`，读取
@@ -62,7 +62,7 @@ PyTorch fallback。记录 `op.backend_id` 可确认实际后端。普通 `get_op
 ## 验证
 
 ```bash
-python -m pytest tests/test_h3_video_patch.py -q
+python -m pytest tests/test_video_patch_pack_unpack.py -q
 mkdocs build --strict -f mkdocs.yaml
 ```
 

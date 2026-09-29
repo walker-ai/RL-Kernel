@@ -9,7 +9,7 @@ import torch
 import triton
 import triton.language as tl
 
-from rl_engine.kernels.ops.pytorch.packing.h3_video_patch import (
+from rl_engine.kernels.ops.pytorch.packing.video_patch_pack_unpack import (
     _CHANNELS,
     _WIDTH,
     _validate_pack,
@@ -92,8 +92,8 @@ class _VideoPatchPermutation(torch.autograd.Function):
         return result.reshape(ctx.input_shape), None, None
 
 
-class TritonH3VideoPatchOp:
-    backend_id = "triton-h3-video-patch-v1"
+class TritonVideoPatchPackUnpackOp:
+    backend_id = "triton-video-patch-pack-unpack-v1"
 
     def __init__(self) -> None:
         if not torch.cuda.is_available():

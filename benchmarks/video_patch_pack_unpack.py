@@ -12,7 +12,9 @@ import time
 
 import torch
 
-from rl_engine.kernels.ops.pytorch.packing.h3_video_patch import NativeH3VideoPatchOp
+from rl_engine.kernels.ops.pytorch.packing.video_patch_pack_unpack import (
+    NativeVideoPatchPackUnpackOp,
+)
 from rl_engine.kernels.registry import KernelRegistry
 
 
@@ -52,7 +54,7 @@ def main() -> None:
     shape = (args.batch, 24, args.frames, args.height, args.width)
     x = torch.randn(shape, device=args.device, dtype=dtype)
     op = KernelRegistry().get_video_patch_pack_unpack_op(args.device, strict=True)
-    reference = NativeH3VideoPatchOp()
+    reference = NativeVideoPatchPackUnpackOp()
     tokens = op.pack(x)
     assert torch.equal(op.unpack(tokens, shape), x)
     assert torch.equal(tokens, reference.pack(x))
@@ -74,7 +76,7 @@ def main() -> None:
         sha = "unknown"
         dirty = None
     print(json.dumps({
-        "schema_version": "rlkernel.h3_video_patch.benchmark.v1",
+        "schema_version": "rlkernel.video_patch_pack_unpack.benchmark.v1",
         "git_sha": sha,
         "git_dirty": dirty,
         "requested_backend": "triton" if args.device == "cuda" else "pytorch",

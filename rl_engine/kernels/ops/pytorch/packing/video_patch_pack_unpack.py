@@ -66,7 +66,7 @@ def _validate_unpack(
     return b, c, t, h, w
 
 
-def pack_h3_video_reference(x: torch.Tensor) -> torch.Tensor:
+def pack_video_patch_reference(x: torch.Tensor) -> torch.Tensor:
     """Return (B,S,96), with S ordered frame-major, then row-major."""
     b, t, h, w = _validate_pack(x)
     return (
@@ -77,7 +77,7 @@ def pack_h3_video_reference(x: torch.Tensor) -> torch.Tensor:
     )
 
 
-def unpack_h3_video_reference(
+def unpack_video_patch_reference(
     tokens: torch.Tensor, shape: tuple[int, int, int, int, int]
 ) -> torch.Tensor:
     """Invert the H3 patch permutation without arithmetic or dtype conversion."""
@@ -90,13 +90,13 @@ def unpack_h3_video_reference(
     )
 
 
-class NativeH3VideoPatchOp:
-    backend_id = "pytorch-h3-video-patch-v1"
+class NativeVideoPatchPackUnpackOp:
+    backend_id = "pytorch-video-patch-pack-unpack-v1"
 
     def pack(self, x: torch.Tensor) -> torch.Tensor:
-        return pack_h3_video_reference(x)
+        return pack_video_patch_reference(x)
 
     def unpack(
         self, tokens: torch.Tensor, shape: tuple[int, int, int, int, int]
     ) -> torch.Tensor:
-        return unpack_h3_video_reference(tokens, shape)
+        return unpack_video_patch_reference(tokens, shape)
