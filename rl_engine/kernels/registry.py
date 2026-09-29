@@ -109,6 +109,9 @@ class OpBackend(Enum, metaclass=_KernelEnumMeta):
     PYTORCH_VIDEO_PATCH_PACK_UNPACK = (
         "rl_engine.kernels.ops.pytorch.video_patch_pack_unpack.NativeVideoPatchPackUnpackOp"
     )
+    CUDA_VIDEO_PATCH_PACK_UNPACK = (
+        "rl_engine.kernels.ops.cuda.video_patch_pack_unpack.CudaVideoPatchPackUnpackOp"
+    )
     TRITON_VIDEO_PATCH_PACK_UNPACK = (
         "rl_engine.kernels.ops.triton.video_patch_pack_unpack.TritonVideoPatchPackUnpackOp"
     )
@@ -591,6 +594,7 @@ class KernelRegistry:
                 "ratio_kl": [OpBackend.TRITON_RATIO_KL, OpBackend.PYTORCH_RATIO_KL],
                 "pack": [OpBackend.PYTORCH_PACK],
                 "video_patch_pack_unpack": [
+                    OpBackend.CUDA_VIDEO_PATCH_PACK_UNPACK,
                     OpBackend.TRITON_VIDEO_PATCH_PACK_UNPACK,
                     OpBackend.PYTORCH_VIDEO_PATCH_PACK_UNPACK,
                 ],

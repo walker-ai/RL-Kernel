@@ -120,7 +120,10 @@ def test_gpu_registry_falls_back_to_reference(monkeypatch):
     load_backend = registry._get_or_create_backend
 
     def load_without_triton(backend):
-        if backend is OpBackend.TRITON_VIDEO_PATCH_PACK_UNPACK:
+        if backend in (
+            OpBackend.CUDA_VIDEO_PATCH_PACK_UNPACK,
+            OpBackend.TRITON_VIDEO_PATCH_PACK_UNPACK,
+        ):
             return None
         return load_backend(backend)
 
@@ -129,7 +132,23 @@ def test_gpu_registry_falls_back_to_reference(monkeypatch):
     assert isinstance(op, NativeVideoPatchPackUnpackOp)
 
 
-def test_gpu_registry_prefers_triton():
+def test_gpu_registry_prefers_cuda_when_available():
+    if not torch.cuda.is_available():
+        pytest.skip("NVIDIA CUDA GPU required")
+    if torch.version.hip is not None:
+        pytest.skip("CUDA extension is NVIDIA-only")
+    from rl_engine.kernels.ops.base import _C
+    if _C is None or not hasattr(_C, "video_patch_pack_unpack"):
+        pytest.skip("CUDA video patch extension is not built")
+    from rl_engine.kernels.ops.cuda.video_patch_pack_unpack import (
+        CudaVideoPatchPackUnpackOp,
+    )
+
+    op = KernelRegistry().get_op("video_patch_pack_unpack", device="cuda")
+    assert isinstance(op, CudaVideoPatchPackUnpackOp)
+
+
+def test_gpu_registry_uses_triton_without_cuda_extension(monkeypatch):
     if not torch.cuda.is_available():
         pytest.skip("CUDA/ROCm GPU required")
     pytest.importorskip("triton")
@@ -137,14 +156,34 @@ def test_gpu_registry_prefers_triton():
         TritonVideoPatchPackUnpackOp,
     )
 
-    op = KernelRegistry().get_op("video_patch_pack_unpack", device="cuda")
+    registry = KernelRegistry()
+    load_backend = registry._get_or_create_backend
+
+    def load_without_cuda(backend):
+        if backend is OpBackend.CUDA_VIDEO_PATCH_PACK_UNPACK:
+            return None
+        return load_backend(backend)
+
+    monkeypatch.setattr(registry, "_get_or_create_backend", load_without_cuda)
+    op = registry.get_op("video_patch_pack_unpack", device="cuda")
     assert isinstance(op, TritonVideoPatchPackUnpackOp)
 
 
-@pytest.fixture
-def gpu_op():
+@pytest.fixture(params=("triton", "cuda"))
+def gpu_op(request):
     if not torch.cuda.is_available():
         pytest.skip("CUDA/ROCm GPU required")
+    if request.param == "cuda":
+        if torch.version.hip is not None:
+            pytest.skip("CUDA extension is NVIDIA-only")
+        from rl_engine.kernels.ops.base import _C
+        if _C is None or not hasattr(_C, "video_patch_pack_unpack"):
+            pytest.skip("CUDA video patch extension is not built")
+        from rl_engine.kernels.ops.cuda.video_patch_pack_unpack import (
+            CudaVideoPatchPackUnpackOp,
+        )
+
+        return CudaVideoPatchPackUnpackOp()
     pytest.importorskip("triton")
     from rl_engine.kernels.ops.triton.video_patch_pack_unpack import (
         TritonVideoPatchPackUnpackOp,
@@ -155,7 +194,7 @@ def gpu_op():
 
 @pytest.mark.parametrize("shape", SHAPES)
 @pytest.mark.parametrize("dtype", DTYPES)
-def test_triton_matches_independent_reference(gpu_op, shape, dtype):
+def test_gpu_backends_match_independent_reference(gpu_op, shape, dtype):
     generator = torch.Generator().manual_seed(420)
     cpu_x = torch.randn(shape, generator=generator).to(dtype).requires_grad_()
     gpu_x = cpu_x.detach().to("cuda").requires_grad_()
@@ -184,7 +223,7 @@ def test_triton_matches_independent_reference(gpu_op, shape, dtype):
 
 
 @pytest.mark.parametrize("dtype", DTYPES)
-def test_triton_preserves_special_bits(gpu_op, dtype):
+def test_gpu_backends_preserve_special_bits(gpu_op, dtype):
     patterns = {
         torch.float32: (0, 0x80000000, 0x7F800000, 0xFF800000, 0x7FC01234, 0x7F801234, 1),
         torch.float16: (0, 0x8000, 0x7C00, 0xFC00, 0x7E55, 0x7C55, 1),
@@ -208,7 +247,7 @@ def test_triton_preserves_special_bits(gpu_op, dtype):
     )
 
 
-def test_triton_noncontiguous_grad_and_higher_order(gpu_op):
+def test_gpu_backends_noncontiguous_grad_and_higher_order(gpu_op):
     shape = (2, 24, 3, 6, 10)
     x = torch.randn(shape, device="cuda", requires_grad=True)
     packed = gpu_op.pack(x)
@@ -232,7 +271,7 @@ def test_triton_noncontiguous_grad_and_higher_order(gpu_op):
     )
 
 
-def test_triton_batch_invariance_and_stream(gpu_op):
+def test_gpu_backends_batch_invariance_and_stream(gpu_op):
     shape = (1, 24, 3, 6, 10)
     x = torch.randn(shape, device="cuda")
     other = torch.randn_like(x)
@@ -249,7 +288,7 @@ def test_triton_batch_invariance_and_stream(gpu_op):
     assert_bits(recovered, x)
 
 
-def test_triton_768p_layout(gpu_op):
+def test_gpu_backends_768p_layout(gpu_op):
     # 768x1344 pixels at VAE spatial factor 16: latent H=48, W=84.
     shape = (1, 24, 32, 48, 84)
     cpu_x = torch.randn(shape, dtype=torch.bfloat16)
