@@ -1059,27 +1059,6 @@ class KernelRegistry:
 
         raise RuntimeError(f"No functional backend found for {op_type} on {platform}")
 
-    def get_video_patch_pack_unpack_op(
-        self, device: torch.device | str, *, strict: bool = True
-    ) -> Any:
-        """Resolve the H3 permutation, failing closed on a missing GPU kernel."""
-        platform = self._platform_for_device(device)
-        if platform not in ("cpu", "cuda", "rocm"):
-            raise RuntimeError(f"H3 video patch does not support {platform}")
-        backend = (
-            OpBackend.PYTORCH_VIDEO_PATCH_PACK_UNPACK
-            if platform == "cpu"
-            else OpBackend.TRITON_VIDEO_PATCH_PACK_UNPACK
-        )
-        op = self._get_or_create_backend(backend)
-        if op is not None:
-            return op
-        if not strict and platform != "cpu":
-            fallback = self._get_or_create_backend(OpBackend.PYTORCH_VIDEO_PATCH_PACK_UNPACK)
-            if fallback is not None:
-                return fallback
-        raise RuntimeError(f"H3 video patch backend {backend.name} unavailable on {platform}")
-
     def _platform_for_device(self, device: torch.device | str | None) -> str:
         if device is None:
             return self._platform()

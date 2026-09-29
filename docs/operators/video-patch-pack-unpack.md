@@ -23,15 +23,17 @@ tokens[b, t*(H/2)*(W/2) + hi*(W/2) + wi, c*4 + dy*2 + dx]
 ## 接口与后端
 
 ```python
-op = KernelRegistry().get_video_patch_pack_unpack_op(x.device, strict=True)
+op = KernelRegistry().get_op("video_patch_pack_unpack", device=x.device)
+if x.is_cuda and op.backend_id != "triton-video-patch-pack-unpack-v1":
+    raise RuntimeError(f"unexpected GPU backend: {op.backend_id}")
 tokens = op.pack(x)
 recovered = op.unpack(tokens, tuple(x.shape))
 ```
 
-CPU 使用独立 PyTorch 参考实现；CUDA/ROCm 的 strict 路径使用 Triton。
-Triton 不可用时 strict 路径报错，不静默退回 PyTorch。`strict=False` 才允许
-PyTorch fallback。记录 `op.backend_id` 可确认实际后端。普通 `get_op`
-保留仓库现有的按优先级 fallback 行为；需要严格验证时应使用上面的显式入口。
+CPU 使用独立 PyTorch 参考实现；CUDA/ROCm 优先使用 Triton，缺失时
+`get_op` 可回退 PyTorch。GPU 正确性和性能验证必须检查
+`op.backend_id == "triton-video-patch-pack-unpack-v1"`，避免把回退结果
+当成 Triton 结果。
 
 ## 代码执行链路
 

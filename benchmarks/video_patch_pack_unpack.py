@@ -53,7 +53,14 @@ def main() -> None:
     dtype = getattr(torch, args.dtype)
     shape = (args.batch, 24, args.frames, args.height, args.width)
     x = torch.randn(shape, device=args.device, dtype=dtype)
-    op = KernelRegistry().get_video_patch_pack_unpack_op(args.device, strict=True)
+    op = KernelRegistry().get_op("video_patch_pack_unpack", device=args.device)
+    expected_backend = (
+        "triton-video-patch-pack-unpack-v1"
+        if args.device == "cuda"
+        else "pytorch-video-patch-pack-unpack-v1"
+    )
+    if op.backend_id != expected_backend:
+        raise RuntimeError(f"expected {expected_backend}, got {op.backend_id}")
     reference = NativeVideoPatchPackUnpackOp()
     tokens = op.pack(x)
     assert torch.equal(op.unpack(tokens, shape), x)
