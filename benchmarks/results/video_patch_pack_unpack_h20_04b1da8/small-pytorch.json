@@ -1,0 +1,29 @@
+{
+  "schema_version": "rlkernel.video_patch_pack_unpack.benchmark.v1",
+  "git_sha": "04b1da8cc71c62b6aeb3073794e8be0b0e6efee3",
+  "git_dirty": false,
+  "requested_backend": "pytorch",
+  "actual_backend": "pytorch-video-patch-pack-unpack-v1",
+  "kernel_id": "torch.reshape_permute",
+  "device": "cuda",
+  "device_name": "NVIDIA H20",
+  "torch_version": "2.9.1",
+  "cuda_version": "12.9",
+  "hip_version": null,
+  "dtype": "bfloat16",
+  "shape": [
+    2,
+    24,
+    3,
+    6,
+    10
+  ],
+  "warmup": 20,
+  "repeat": 100,
+  "timings": {
+    "pack_ms": 0.011912959814071655,
+    "unpack_ms": 0.012357439994812012,
+    "reference_pack_ms": 0.011282240152359008,
+    "reference_unpack_ms": 0.012325760126113892
+  }
+}
